@@ -1,15 +1,17 @@
-
 import mysql.connector
 import config
 import time
-import requests 
+import requests
 import json
 
+api_key = config.api_key
+
+#creates and opens a connection to the AWS database
 def create_cnx_cur():
     cnx = mysql.connector.connect(
             host = config.host,
             user = config.user,
-            passwd = config.passwd)
+            passwd = config.password)
 
     cursor = cnx.cursor()
     return (cnx, cursor)
@@ -19,7 +21,7 @@ def close_connection(cnx, cursor):
     cursor.close()
     cnx.close()
 
-
+#creates a new database in the AWS database
 def create_database(cursor, database):
     try:
         #it will try to create a database with whatever name passed through
@@ -28,12 +30,12 @@ def create_database(cursor, database):
         #if this fails, the error will print out as a message
     except mysql.connector.Error as err:
         print("Failed creating database: {}".format(err))
-        try: 
+        try:
             exit()
         except NameError:
             return
 
-    #this is going to try the above function 
+    #this is going to try the above function
     try:
         cursor.execute("USE {}".format(db_name))
     except mysql.connector.Error as err:
@@ -83,17 +85,17 @@ def add_businesses_to_db(tryresults):
                                 VALUES (%s, %s, %s, %s, %s)
                         """)
         try:
-            # note: location is made of a two-item list -- the first address line 
+            # note: location is made of a two-item list -- the first address line
             # and the city/state/etc.
-            business_values = (tryresults['businesses'][i]['id'], 
-                            tryresults['businesses'][i]['name'], 
-                            tryresults['businesses'][i]['price'], 
+            business_values = (tryresults['businesses'][i]['id'],
+                            tryresults['businesses'][i]['name'],
+                            tryresults['businesses'][i]['price'],
                             tryresults['businesses'][i]['rating'],
                             tryresults['businesses'][i]['location']['display_address'][0]+", "+tryresults['businesses'][i]['location']['display_address'][1])
-            
-            cursor.execute("USE yelp") #gets us into the yelp db instance 
+
+            cursor.execute("USE yelp") #gets us into the yelp db instance
             cursor.execute(add_business, business_values)
-            
+
         except mysql.connector.IntegrityError: # here to skip existing entries
             continue
         except KeyError: # here to skip the restaurants that are missing values, such as price
@@ -101,38 +103,38 @@ def add_businesses_to_db(tryresults):
         except IndexError:
             try:
                 print("Issue with: ", tryresults['businesses'][i])
-                business_values = (tryresults['businesses'][i]['id'], 
-                                tryresults['businesses'][i]['name'], 
-                               tryresults['businesses'][i]['price'], 
+                business_values = (tryresults['businesses'][i]['id'],
+                                tryresults['businesses'][i]['name'],
+                               tryresults['businesses'][i]['price'],
                                tryresults['businesses'][i]['rating'],
                                tryresults['businesses'][i]['location']['display_address'][0])
-                cursor.execute("USE yelp") #gets us into the yelp db instance 
+                cursor.execute("USE yelp") #gets us into the yelp db instance
                 cursor.execute(add_business, business_values)
             except:
                 print("Issue with: ", tryresults['businesses'][i])
-                business_values = (tryresults['businesses'][i]['id'], 
-                                tryresults['businesses'][i]['name'], 
-                               tryresults['businesses'][i]['price'], 
+                business_values = (tryresults['businesses'][i]['id'],
+                                tryresults['businesses'][i]['name'],
+                               tryresults['businesses'][i]['price'],
                                tryresults['businesses'][i]['rating'],
                                null)
-                cursor.execute("USE yelp") #gets us into the yelp db instance 
+                cursor.execute("USE yelp") #gets us into the yelp db instance
                 cursor.execute(add_business, business_values)
 
-        
-            
+
+
 
     cnx.commit()
-    close_connection(cnx, cursor)    
+    close_connection(cnx, cursor)
 
 
 def all_results(tryresults, url, api_key, url_params=None):
-    num = tryresults['total'] 
+    num = tryresults['total']
     print('{} total matches found.'.format(num))
     cur = 0
     while cur < num and cur < 500:
         # This gets you to where you should be in the data, rather than just keeping grabbing
         # the first 50 over and over again
-        url_params['offset'] = cur 
+        url_params['offset'] = cur
         results = yelp_call(url, api_key, url_params)
         add_businesses_to_db(results)
         time.sleep(1) #Wait a second
@@ -152,15 +154,15 @@ def add_reviews_to_db(businessIds, url_template, api_key):
     cnx = mysql.connector.connect(
         host = config.host,
         user = config.user,
-        passwd = config.passwd)
+        passwd = config.password)
 
     cursor = cnx.cursor()
-        
+
     results = get_reviews(businessIds, url_template, api_key)
-    
+
     # for each review that is in our dictionary of results from our API requests
     # get each dictionary with all 3 reviews for each business
-    for i in range(len(results)): 
+    for i in range(len(results)):
         # gets each review from dictionary
         for review in results[i]['reviews']:
             # sql statement to add row
@@ -168,18 +170,18 @@ def add_reviews_to_db(businessIds, url_template, api_key):
                                     VALUES (%s, %s, %s, %s, %s, %s)
                             """)
             try:
-                review_values = (review['id'], results[i]['businessId'], 
-                                   review['user']['id'], review['text'], review['rating'], 
+                review_values = (review['id'], results[i]['businessId'],
+                                   review['user']['id'], review['text'], review['rating'],
                                    review['time_created'])
 
-                cursor.execute("USE yelp") #gets us into the yelp db instance 
+                cursor.execute("USE yelp") #gets us into the yelp db instance
                 cursor.execute(add_review, review_values)
 
             except mysql.connector.IntegrityError: # here to skip existing entries
                 continue
             except KeyError: # here to skip the restaurants that are missing values, such as price
                 continue
-            
+
     cnx.commit()
     cursor.close()
     cnx.close()
